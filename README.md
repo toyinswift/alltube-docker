@@ -1,3 +1,5 @@
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run)
+
 ## Quick Start
 
 [AllTube Download](https://github.com/Rudloff/alltube) is a Web GUI for [youtube-dl](https://github.com/ytdl-org/youtube-dl), you can use it to download videos from a lot of websites online, even if they don't want you to do this.
