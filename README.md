@@ -1,5 +1,7 @@
 ## Quick Start
 
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run)
+
 [AllTube Download](https://github.com/Rudloff/alltube) is a Web GUI for [youtube-dl](https://github.com/ytdl-org/youtube-dl), you can use it to download videos from a lot of websites online, even if they don't want you to do this.
 
 *AllTube* provide an [official site](http://alltubedownload.net/) to use *youtube-dl* online, or you can create one under your own domain. Unfortunately, the deployment of *AllTube* is a bit cumbersome, and a good docker can make your deployment faster.
