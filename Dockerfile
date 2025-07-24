@@ -8,7 +8,7 @@ RUN apk add php-json php-phar php-mbstring php-openssl
 RUN wget https://install.phpcomposer.com/installer -O - | php
 
 FROM ${ALPINE} AS yt-dlp
-ENV YTDLP="2025.02.19"
+ENV YTDLP="2025.07.21"
 RUN wget https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP}/yt-dlp
 RUN chmod +x yt-dlp
 
