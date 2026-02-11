@@ -1,4 +1,4 @@
-ARG ALPINE="alpine:3.15"
+ARG ALPINE="alpine:3.19"
 
 # TODO: remove php-json after php8 (>=alpine:3.16)
 # TODO: /usr/bin/python already exist (>=alpine:3.17)
