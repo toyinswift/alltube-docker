@@ -1,93 +1,45 @@
-# -----------------------------
-# Base
-# -----------------------------
-ARG ALPINE="alpine:3.20"
+ARG ALPINE="alpine:3.19"
 
-# -----------------------------
-# Composer stage
-# -----------------------------
+# TODO: remove php-json after php8 (>=alpine:3.16)
+# TODO: /usr/bin/python already exist (>=alpine:3.17)
+
 FROM ${ALPINE} AS composer
+RUN apk add --no-cache php81-json php81-phar php81-mbstring php81-openssl
+RUN wget https://install.phpcomposer.com/installer -O - | php
 
-RUN apk add --no-cache php83 php83-phar php83-json php83-mbstring php83-openssl curl
-
-RUN curl -sS https://getcomposer.org/installer | php83 -- \
-    --install-dir=/usr/local/bin \
-    --filename=composer
-
-# -----------------------------
-# yt-dlp stage (latest)
-# -----------------------------
 FROM ${ALPINE} AS yt-dlp
+ENV YTDLP="2026.02.04"
+RUN wget https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP}/yt-dlp -O /usr/bin/yt-dlp
+RUN chmod +x /usr/bin/yt-dlp
 
-RUN apk add --no-cache curl
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-    -o /usr/local/bin/yt-dlp \
-    && chmod +x /usr/local/bin/yt-dlp
-
-# -----------------------------
-# AllTube stage
-# -----------------------------
 FROM ${ALPINE} AS alltube
-
-RUN apk add --no-cache \
-    php83 php83-dom php83-gmp php83-xml php83-intl php83-json \
-    php83-gettext php83-openssl php83-mbstring php83-simplexml \
-    php83-tokenizer php83-xmlwriter php83-phar curl patch
-
-ENV ALLTUBE="3.2.0"
-
-RUN curl -L https://github.com/Rudloff/alltube/archive/${ALLTUBE}.tar.gz \
-    | tar xzf -
-
-COPY --from=composer /usr/local/bin/composer /usr/local/bin/composer
-
-WORKDIR /alltube-${ALLTUBE}/
-
+RUN apk add --no-cache php81-json php81-phar php81-mbstring php81-openssl
+RUN apk add --no-cache patch php81-dom php81-gmp php81-xml php81-intl php81-gettext php81-simplexml php81-tokenizer php81-xmlwriter
+ENV ALLTUBE="3.2.0-alpha"
+RUN wget https://github.com/Rudloff/alltube/archive/${ALLTUBE}.tar.gz -O - | tar xzf -
+COPY --from=composer /composer.phar /usr/bin/composer
+WORKDIR ./alltube-${ALLTUBE}/
 RUN composer install --no-interaction --optimize-autoloader --no-dev
-
 RUN mv ./config/config.example.yml ./config/config.yml
-
 COPY ./attach.css /tmp/
 RUN cat /tmp/attach.css >> ./css/style.css
-
-RUN mkdir -p ./templates_c && chmod -R 777 ./templates_c
-
+RUN chmod 777 ./templates_c/
 RUN mv $(pwd) /alltube/
 
-# -----------------------------
-# Build stage
-# -----------------------------
 FROM ${ALPINE} AS build
+RUN apk add --no-cache php81-fpm python3
+WORKDIR /release/usr/bin/
+RUN ln -sf /usr/bin/python3 /release/usr/bin/python
+WORKDIR /release/etc/php81/php-fpm.d/
+RUN sed 's?127.0.0.1:9000?/run/php-fpm.sock?' /etc/php81/php-fpm.d/www.conf > www.conf
+COPY --from=alltube /alltube/ /release/var/www/alltube/
+COPY --from=yt-dlp /usr/bin/yt-dlp /release/usr/bin/yt-dlp
+COPY ./init.sh /release/usr/bin/alltube
+COPY ./nginx/ /release/etc/nginx/
 
-RUN apk add --no-cache php83-fpm
-
-# Adjust PHP-FPM config (php83 path now)
-RUN sed 's?127.0.0.1:9000?/run/php-fpm.sock?' \
-    /etc/php83/php-fpm.d/www.conf > /etc/php83/php-fpm.d/www.conf
-
-WORKDIR /release
-
-# Python symlink
-RUN mkdir -p usr/bin && ln -s /usr/bin/python3 usr/bin/python
-
-COPY --from=alltube /alltube/ var/www/alltube/
-COPY --from=yt-dlp /usr/local/bin/yt-dlp usr/bin/yt-dlp
-COPY ./init.sh usr/bin/alltube
-COPY ./nginx/ etc/nginx/
-
-# -----------------------------
-# Final runtime image
-# -----------------------------
 FROM ${ALPINE}
-
-RUN apk add --no-cache \
-    nginx ffmpeg python3 \
-    php83 php83-dom php83-fpm php83-gmp php83-xml php83-intl php83-json \
-    php83-gettext php83-openssl php83-mbstring php83-simplexml \
-    php83-tokenizer php83-xmlwriter
-
+RUN apk add --no-cache nginx ffmpeg python3 php81-fpm php81-json php81-mbstring php81-openssl \
+      php81-dom php81-gmp php81-xml php81-intl php81-gettext php81-simplexml php81-tokenizer php81-xmlwriter
 COPY --from=build /release/ /
-
 EXPOSE 80
-
 ENTRYPOINT ["alltube"]
