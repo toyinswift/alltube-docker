@@ -5,74 +5,74 @@ ARG ALPINE="alpine:3.19"
 # ---------------------------
 FROM ${ALPINE} AS composer
 RUN apk add --no-cache php82 php82-json php82-phar php82-mbstring php82-openssl curl
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
+RUN curl -sS https://getcomposer.org/installer | php -- \
+    --install-dir=/usr/bin \
+    --filename=composer
 
 # ---------------------------
-# yt-dlp stage (HARDCODED LATEST)
+# yt-dlp stage (Standalone Binary)
 # ---------------------------
 FROM ${ALPINE} AS yt-dlp
-ENV YTDLP_VERSION="2026.01.31"
-RUN apk add --no-cache python3 curl
+
+ENV YTDLP_VERSION="2026.02.04"
+
+RUN apk add --no-cache curl
 RUN curl -L \
-    https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp \
-    -o /usr/bin/yt-dlp
-RUN chmod +x /usr/bin/yt-dlp
+    https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux \
+    -o /usr/bin/yt-dlp \
+    && chmod +x /usr/bin/yt-dlp
 
 # ---------------------------
-# Alltube stage (latest existing)
+# AllTube stage (YOUR FORK)
 # ---------------------------
 FROM ${ALPINE} AS alltube
+
 RUN apk add --no-cache \
     php82 php82-dom php82-gmp php82-xml php82-intl php82-json \
     php82-phar php82-gettext php82-openssl php82-mbstring \
     php82-simplexml php82-tokenizer php82-xmlwriter \
-    curl tar patch git
+    curl tar git patch
 
-ENV ALLTUBE="3.2.0-alpha"
+# Pull YOUR fork instead of archived upstream
+RUN git clone https://github.com/toyinswift/alltube.git /alltube
 
-RUN curl -L \
-    https://github.com/Rudloff/alltube/archive/refs/tags/${ALLTUBE}.tar.gz \
-    | tar xz
-
-WORKDIR /alltube-${ALLTUBE}/
+WORKDIR /alltube
 
 COPY --from=composer /usr/bin/composer /usr/bin/composer
 RUN composer install --no-interaction --optimize-autoloader --no-dev
-RUN mv ./config/config.example.yml ./config/config.yml
 
+RUN mv config/config.example.yml config/config.yml
+
+# Optional: attach custom CSS if present
 COPY ./attach.css /tmp/
-RUN cat /tmp/attach.css >> ./css/style.css
-RUN chmod 777 ./templates_c/
-RUN mv $(pwd) /alltube/
+RUN if [ -f /tmp/attach.css ]; then \
+        cat /tmp/attach.css >> css/style.css ; \
+    fi
 
-# ---------------------------
-# Build stage
-# ---------------------------
-FROM ${ALPINE} AS build
-RUN apk add --no-cache php82-fpm
-
-WORKDIR /release/usr/bin/
-RUN ln -s /usr/bin/python3 python
-
-WORKDIR /release/etc/php82/php-fpm.d/
-RUN sed 's?127.0.0.1:9000?/run/php-fpm.sock?' /etc/php82/php-fpm.d/www.conf > www.conf
-
-COPY --from=alltube /alltube/ /release/var/www/alltube/
-COPY --from=yt-dlp /usr/bin/yt-dlp /release/usr/bin/
-COPY ./init.sh /release/usr/bin/alltube
-COPY ./nginx/ /release/etc/nginx/
+RUN chmod 755 templates_c/
 
 # ---------------------------
 # Final runtime image
 # ---------------------------
 FROM ${ALPINE}
+
 RUN apk add --no-cache \
-    nginx ffmpeg python3 \
-    php82 php82-dom php82-fpm php82-gmp php82-xml php82-intl php82-json \
+    nginx ffmpeg \
+    php82 php82-fpm php82-dom php82-gmp php82-xml php82-intl php82-json \
     php82-gettext php82-openssl php82-mbstring php82-simplexml \
     php82-tokenizer php82-xmlwriter
 
-COPY --from=build /release/ /
+# Configure php-fpm socket
+RUN sed -i 's?127.0.0.1:9000?/run/php-fpm.sock?' \
+    /etc/php82/php-fpm.d/www.conf
+
+COPY --from=alltube /alltube /var/www/alltube
+COPY --from=yt-dlp /usr/bin/yt-dlp /usr/bin/yt-dlp
+COPY ./init.sh /usr/bin/alltube
+COPY ./nginx/ /etc/nginx/
+
+RUN chmod +x /usr/bin/alltube
 
 EXPOSE 80
 ENTRYPOINT ["alltube"]
+
